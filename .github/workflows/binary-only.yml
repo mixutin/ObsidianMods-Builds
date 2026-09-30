@@ -1,0 +1,48 @@
+name: Enforce binary-only repository
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Reject mod source files
+        shell: bash
+        run: |
+          set -euo pipefail
+          forbidden_regex='\.(c|cc|cpp|cxx|h|hh|hpp|hxx|rs|lua|luau|py|cs|java|kt|swift|go|zig|asm|s)$'
+          mapfile -t files < <(git ls-files)
+          bad=()
+          for file in "${files[@]}"; do
+            case "$file" in
+              .github/*|README.md|LICENSE|SECURITY.md) continue ;;
+            esac
+            if [[ "$file" =~ $forbidden_regex ]]; then
+              bad+=("$file")
+            fi
+          done
+          if (("${#bad[@]}" > 0)); then
+            echo "Source files are not allowed in ObsidianMods-Builds:"
+            printf '  %s\n' "${bad[@]}"
+            exit 1
+          fi
+          echo "Binary-only policy: OK"
+
+      - name: Reject source directories
+        run: |
+          if find . -path ./.git -prune -o -type d \
+            \( -name src -o -name source -o -name sources -o -name mods \) \
+            -print -quit | grep -q .; then
+            echo "Source directories are not allowed in this repository."
+            exit 1
+          fi
